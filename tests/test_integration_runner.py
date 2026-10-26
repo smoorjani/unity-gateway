@@ -45,6 +45,17 @@ def test_copilot_headless_target_and_exact_version(tmp_path):
     assert args.copilot_version == "1.0.91"
 
 
+def test_bedrock_provider_can_be_set_by_ci_environment():
+    args = runner.arguments(
+        ["--claude-version", "2.1.290", "--installation-only"],
+        environment={
+            "UG_INTEGRATION_CLAUDE_BEDROCK_ALLOW_ALL_PROVIDER": "main.ucode.ci_e2e_bedrock_mps"
+        },
+    )
+
+    assert args.claude_bedrock_allow_all_provider == "main.ucode.ci_e2e_bedrock_mps"
+
+
 def test_copilot_version_output_matches_the_pinned_version():
     output = "GitHub Copilot CLI 1.0.91.\nRun 'copilot update' to check for updates.\n"
     assert runner.agent_version_output("copilot", output) == "GitHub Copilot CLI 1.0.91"

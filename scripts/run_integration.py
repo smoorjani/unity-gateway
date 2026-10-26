@@ -287,7 +287,8 @@ def arguments(
     )
     parser.add_argument(
         "--claude-bedrock-allow-all-provider",
-        default="main.ucode.e2e_bedrock_all_models_enabled",
+        default=environment.get("UG_INTEGRATION_CLAUDE_BEDROCK_ALLOW_ALL_PROVIDER")
+        or "main.ucode.e2e_bedrock_all_models_enabled",
         help="Bedrock MPS with allow_all_targets and no declared targets, for the #811 CUJ.",
     )
     parser.add_argument(
