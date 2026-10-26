@@ -367,6 +367,7 @@ SKIPPED_ON_FORK_PRS = {
     "copilot",
     "managed",
     "managed-opencode",
+    "managed-copilot",
     "dedicated-cuj-plan",
     "dedicated-cuj",
     "cujs",

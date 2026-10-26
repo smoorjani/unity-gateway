@@ -482,7 +482,7 @@ preferences are ignored and their files are left untouched. See the bundled
 | Claude Code | `~/.claude/ucode-settings.json`, `~/.claude.json`, `/etc/claude-code/managed-settings.json` (Linux), `/Library/Application Support/ClaudeCode/managed-settings.json` (macOS), `C:\Program Files\ClaudeCode\managed-settings.json` (Windows, written only from an elevated terminal) |
 | Gemini CLI | `~/.gemini/ucode.env`, `~/.ucode/.gemini-home/.gemini/settings.json` |
 | OpenCode | `~/.ucode/opencode-xdg/opencode/opencode.json`, `~/.ucode/opencode-xdg/opencode/plugin/ucode-auth.js` |
-| GitHub Copilot CLI | `~/.copilot/ucode.env`, `~/.copilot/ucode-mcp-config.json` |
+| GitHub Copilot CLI | `~/.copilot/ucode.env`, `~/.copilot/mcp-config.json` (or `$COPILOT_HOME/mcp-config.json`) |
 | Pi | `~/.ucode/pi-home/.pi/agent/models.json`, `~/.ucode/pi-home/.pi/agent/settings.json` |
 | Cursor Agent | `~/.cursor/mcp.json` |
 | Unity Gateway | `/etc/unitygateway/managed-settings.json` (Linux and macOS), `~/.ucode/refresh_ts.json`, `~/.ucode/managed-state.json`, `~/.ucode/managed-backups/` |

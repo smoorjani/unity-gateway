@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -16,7 +17,6 @@ import questionary
 from rich.table import Table
 
 from ucode.agents import claude, codex, copilot, cursor, gemini, kilo, opencode
-from ucode.config_io import restore_file
 from ucode.constants import MCP_CLEANUP_SCOPES, MCP_USER_SCOPE
 from ucode.databricks import (
     AIGW_MCP_SERVICES_SEGMENT,
@@ -126,7 +126,7 @@ MCP_CLIENTS = {
     "copilot": {
         "binary": "copilot",
         "display": "GitHub Copilot CLI",
-        "list_command": "copilot mcp list",
+        "list_command": "copilot mcp list --json",
     },
     "cursor": {
         "binary": "cursor-agent",
@@ -442,6 +442,8 @@ def revert_mcp_configs(state: dict) -> dict[str, bool]:
     all_servers = list(state.get("mcp_servers") or []) + list(
         state.get("managed_mcp_servers") or []
     )
+    if copilot.remove_legacy_mcp_config():
+        results["copilot"] = True
     for server in all_servers:
         name = server.get("name")
         if not isinstance(name, str) or not name:
@@ -452,16 +454,6 @@ def revert_mcp_configs(state: dict) -> dict[str, bool]:
             removed_scopes = remove_client_mcp_server(client, name)
             results[client] = bool(removed_scopes) or results.get(client, False)
 
-    # OpenCode MCP entries live in the normal OpenCode config and are restored
-    # by the main agent config revert. Copilot stores MCP servers separately,
-    # so restore its original MCP file after removing per-server entries above.
-    results["copilot"] = restore_file(
-        copilot.COPILOT_MCP_CONFIG_PATH,
-        copilot.COPILOT_MCP_BACKUP_PATH,
-        any(
-            "copilot" in (server.get("clients") or []) for server in state.get("mcp_servers") or []
-        ),
-    ) or results.get("copilot", False)
     return results
 
 
@@ -2305,8 +2297,8 @@ def remove_mcp_command(agents: set[str] | None = None) -> int:
 # ---------------------------------------------------------------------------
 
 # Per-(server, agent) live states surfaced by `ug mcp list`. Every agent's `mcp list`
-# health-checks its servers and reports connected/failed — except Codex, whose listing
-# reports only whether an entry is enabled/disabled (no probe). NOT_REGISTERED means the
+# health-checks its servers and reports connected/failed — except Codex and Copilot, whose listings
+# report only whether an entry is enabled/disabled (no probe). NOT_REGISTERED means the
 # agent is installed but doesn't list the server; a server maps to None (rendered
 # "agent not installed") when the agent binary isn't installed at all.
 LIVE_CONNECTED = "connected"
@@ -2442,6 +2434,24 @@ def _parse_kilo_mcp_list(output: str) -> dict[str, str]:
     return statuses
 
 
+def _parse_copilot_mcp_list(output: str) -> dict[str, str]:
+    """Parse `copilot mcp list --json` into ``{server_name: state}``.
+
+    Like Codex, Copilot reports config state (``enabled``), not a health probe. Output that isn't
+    the expected JSON object contributes nothing."""
+    try:
+        servers = json.loads(output[output.find("{") :]).get("mcpServers")
+    except (json.JSONDecodeError, AttributeError):
+        return {}
+    if not isinstance(servers, dict):
+        return {}
+    return {
+        name: LIVE_ENABLED if entry.get("enabled", True) else LIVE_DISABLED
+        for name, entry in servers.items()
+        if isinstance(entry, dict)
+    }
+
+
 def parse_mcp_list_output(client: str, output: str) -> dict[str, str]:
     """Parse an agent's `mcp list` output into ``{server_name: live-state}`` (best-effort).
 
@@ -2452,6 +2462,8 @@ def parse_mcp_list_output(client: str, output: str) -> dict[str, str]:
     """
     if client == "codex":
         parsed = _parse_codex_mcp_list(output)
+    elif client == "copilot":
+        parsed = _parse_copilot_mcp_list(output)
     elif client == "kilo":
         parsed = _parse_kilo_mcp_list(output)
     else:
@@ -2718,9 +2730,13 @@ def list_mcp_command(agents: set[str] | None = None) -> int:
         print_note(f"Other MCP servers not configured by ug — {other_summary}.")
 
     live_note = "Live status is from each agent's `mcp list`"
-    if "codex" in probe_clients:
-        # Only mention Codex's enabled/disabled caveat when Codex is actually in the reported set.
-        live_note += "; Codex reports enabled/disabled"
+    # Only mention the enabled/disabled caveat for the agents actually in the reported set.
+    config_state_clients = [
+        MCP_CLIENTS[client]["display"] for client in ("codex", "copilot") if client in probe_clients
+    ]
+    if config_state_clients:
+        verb = "reports" if len(config_state_clients) == 1 else "report"
+        live_note += f"; {' and '.join(config_state_clients)} {verb} enabled/disabled"
     print_note(f"{live_note}.")
     # A `needs sign-in` server is registered fine but needs the one-time per-user connection login;
     # point the developer at it rather than leaving an opaque status.
