@@ -562,7 +562,6 @@ def configure_shared_state(
     if workspace_id is None and previous_workspace == workspace:
         workspace_id = prior_state.get("workspace_id")
     key = workspace_key(workspace, workspace_id)
-    activate(workspace, workspace_id)
     previous_key = state_workspace_key(prior_state)
     purge_kwargs = {"same_host_switch": True} if previous_workspace == workspace else {}
     if use_pat is None:
@@ -586,6 +585,8 @@ def configure_shared_state(
         state["workspace_id"] = workspace_id
     else:
         state.pop("workspace_id", None)
+    # After `load_state`, which selected the previous workspace.
+    activate(workspace, workspace_id)
     # `state` starts from the current workspace's block, so its self-managed list belongs to the
     # source workspace. The opt-in is per workspace: replace it with the destination's own list.
     dest_self_managed = workspace_self_managed_agents(key)
