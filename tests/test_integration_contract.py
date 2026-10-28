@@ -104,27 +104,7 @@ def test_soft_fail_marks_only_the_affected_claude_journey():
     assert marked == [("test_ug_smart_routing_hooks.py", name) for name in CLAUDE_TOGGLE_TESTS]
 
 
-@pytest.mark.parametrize(
-    ("job_name", "agent", "retained_test"),
-    [
-        ("smoke", "claude", "test_ug_claude_headless_prompt_argument"),
-        ("smoke", "codex", "test_ug_codex_headless_prompt_argument"),
-        ("full", "claude", "test_smart_routing_claude_route_subagent_hook"),
-        ("full", "codex", "test_smart_router_skill_turns_codex_subagent_routing_back_on"),
-        ("desktop-mcp", "claude", "test_ug_configure_claude_desktop_cowork_mcp"),
-        ("managed", "claude", "test_ug_configure_managed_claude"),
-        ("managed", "codex", "test_smart_router_skill_turns_codex_subagent_routing_back_on"),
-        ("soft-fail", "claude", None),
-    ],
-)
-def test_soft_fail_ci_selectors_preserve_coverage(job_name, agent, retained_test):
-    job = _integration_jobs()[job_name]
-    if job_name == "managed":
-        marker = re.search(r'-- -m "([^"]+)"', job)
-    else:
-        marker = re.search(r"(?m)^      TEST_MARKER: (.+)$", job)
-    assert marker is not None
-    expression = marker.group(1).replace("${{ matrix.agent }}", agent).replace("$AGENT", agent)
+def _collect_integration_cases(expression):
     result = subprocess.run(
         [
             sys.executable,
@@ -145,6 +125,30 @@ def test_soft_fail_ci_selectors_preserve_coverage(job_name, agent, retained_test
     assert result.returncode == 0, result.stdout + result.stderr
     cases = {line for line in result.stdout.splitlines() if line.startswith("test_")}
     assert cases, result.stdout
+    return cases
+
+
+@pytest.mark.parametrize(
+    ("job_name", "agent", "retained_test"),
+    [
+        ("smoke", "claude", "test_ug_claude_headless_prompt_argument"),
+        ("smoke", "codex", "test_ug_codex_headless_prompt_argument"),
+        ("full", "claude", "test_smart_routing_claude_route_subagent_hook"),
+        ("full", "codex", "test_smart_router_skill_turns_codex_subagent_routing_back_on"),
+        ("managed", "claude", "test_ug_configure_managed_claude"),
+        ("managed", "codex", "test_smart_router_skill_turns_codex_subagent_routing_back_on"),
+        ("soft-fail", "claude", None),
+    ],
+)
+def test_soft_fail_ci_selectors_preserve_coverage(job_name, agent, retained_test):
+    job = _integration_jobs()[job_name]
+    if job_name == "managed":
+        marker = re.search(r'-- -m "([^"]+)"', job)
+    else:
+        marker = re.search(r"(?m)^      TEST_MARKER: (.+)$", job)
+    assert marker is not None
+    expression = marker.group(1).replace("${{ matrix.agent }}", agent).replace("$AGENT", agent)
+    cases = _collect_integration_cases(expression)
     if job_name == "full":
         assert not any("::test_ug_configure_claude_desktop_cowork_mcp" in case for case in cases)
     if retained_test is not None:
@@ -162,6 +166,34 @@ def test_soft_fail_ci_selectors_preserve_coverage(job_name, agent, retained_test
             "subagent_only_v1",
             "subagent_orch_v0",
         )
+    }
+
+
+def test_full_claude_lane_runs_desktop_mcp_with_step_scoped_credentials():
+    jobs = _integration_jobs()
+    full = jobs["full"]
+    assert "os: [ubuntu-22.04, windows-latest]" in full
+    assert "RUN_DESKTOP_MCP: ${{ matrix.agent == 'claude' }}" in full
+    assert "steps: *live-steps" in full
+    step = (
+        jobs["smoke"]
+        .split("      - name: Run Desktop Cowork MCP cases against the fixture workspace\n", 1)[1]
+        .split("      - name:", 1)[0]
+    )
+    assert "if: ${{ !cancelled() && env.RUN_DESKTOP_MCP == 'true' }}" in step
+    environment = dict(re.findall(r"(?m)^          ([A-Z_]+): (.+)$", step))
+    assert environment == {
+        "UCODE_TEST_WORKSPACE": "https://dbc-bbdd5508-648e.cloud.databricks.com",
+        "DATABRICKS_BEARER": "''",
+        "DATABRICKS_CLIENT_ID": "${{ secrets.UG_CUJ_SP_CLIENT_ID }}",
+        "DATABRICKS_CLIENT_SECRET": "${{ secrets.UG_CUJ_SP_CLIENT_SECRET }}",
+        "CLAUDE_CODE_OAUTH_TOKEN": "''",
+    }
+    assert '--output "$RUNNER_TEMP/ug-integration-desktop-mcp"' in step
+    marker = re.search(r'-- -m "([^"]+)"', step)
+    assert marker is not None
+    assert _collect_integration_cases(marker.group(1)) == {
+        "test_ug_configure_claude_desktop.py::test_ug_configure_claude_desktop_cowork_mcp"
     }
 
 
@@ -365,7 +397,6 @@ SKIPPED_ON_FORK_PRS = {
     "workspace",
     "smoke",
     "headless-windows",
-    "desktop-mcp",
     "full",
     "soft-fail",
     "opencode",
