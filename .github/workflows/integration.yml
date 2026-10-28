@@ -227,6 +227,7 @@ jobs:
             "${args[@]}" -- -m "$TEST_MARKER"
       - name: Run Desktop Cowork MCP cases against the fixture workspace
         if: ${{ !cancelled() && env.RUN_DESKTOP_MCP == 'true' }}
+        timeout-minutes: 20
         shell: bash
         env:
           UCODE_TEST_WORKSPACE: https://dbc-bbdd5508-648e.cloud.databricks.com
@@ -346,9 +347,8 @@ jobs:
       # Keep the previous per-agent serialization across the new OS matrix.
       group: integration-full-${{ github.run_id }}-${{ matrix.agent }}
       cancel-in-progress: false
-    # The runner enforces its own 3600s pytest deadline; keep the job above it
-    # so a slow run fails through the runner's report instead of a job kill.
-    timeout-minutes: 70
+    # Allow the general runner's 3600s deadline, the bounded Cowork step, and setup/uploads.
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       # One runner per OS variant; concurrency above serializes variants per agent.
